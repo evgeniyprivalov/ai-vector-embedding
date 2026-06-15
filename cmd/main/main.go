@@ -1,16 +1,22 @@
 package main
 
 import (
+	"bufio"
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
+	_ "github.com/joho/godotenv/autoload"
+	"github.com/kelseyhightower/envconfig"
 	openai "github.com/sashabaranov/go-openai"
 	log "gitlab.com/evgeniyprivalov/golib/observability/log"
+	"gitlab.com/evgeniyprivalov/golib/pg"
 
+	config "ai-vector-embedding/internal/config"
+	repository "ai-vector-embedding/internal/repository"
 	embedding "ai-vector-embedding/internal/services/embedding"
 	index_manager "ai-vector-embedding/internal/services/index_manager"
 	search2 "ai-vector-embedding/internal/services/search"
@@ -21,12 +27,10 @@ func main() {
 }
 
 func run() int {
-	query := flag.String("query", "", "Search query")
-	flag.Parse()
-
-	if *query == "" {
-		flag.PrintDefaults()
-		return 1
+	var cfg config.Config
+	if err := envconfig.Process("", &cfg); err != nil {
+		fmt.Println(fmt.Errorf("can not parse configs: %w", err))
+		os.Exit(1)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -47,33 +51,105 @@ func run() int {
 		os.Exit(1)
 	}()
 
-	logger := log.New()
-
-	cfg := openai.DefaultConfig("ollama")
-	cfg.BaseURL = "http://localhost:11434/v1"
-
-	embeddingService := embedding.NewEmbeddingService(
-		openai.NewClientWithConfig(cfg),
+	logFile, err := os.OpenFile(
+		"app.log",
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
+		0644,
 	)
-	indexManagerService := index_manager.NewIndexManager(embeddingService, logger)
-
-	vectorIndex, err := indexManagerService.Sync(ctx, "index.json", "documents.txt")
 	if err != nil {
+		fmt.Println(fmt.Errorf("can not open log file: %w", err))
+		os.Exit(1)
+	}
+	defer func() {
+		_ = logFile.Close()
+	}()
+
+	logger := log.New(
+		log.WithLevel(log.InfoLevel),
+		log.WithOutput(logFile),
+	)
+	db, err := pg.NewClient(
+		ctx,
+		pg.WithDSN(cfg.PostgreSQLDSN),
+	)
+	if err != nil {
+		logger.Error("can not init postgresql", "error", err)
+		os.Exit(1)
+	}
+
+	// Repositories
+	documentsRepository := repository.NewDocumentsRepository(db)
+	openAIClient := newOpenAIClient(cfg)
+
+	// Services
+	embeddingService := embedding.NewEmbeddingService(openAIClient)
+	indexManagerService := index_manager.NewIndexManager(embeddingService, logger, "index.json", "documents.txt")
+	if err = indexManagerService.AutoSync(ctx); err != nil {
 		logger.WithCtx(ctx).Error("Failed to sync index", "error", err)
 		os.Exit(1)
 	}
 
-	searchService := search2.NewSearchService(embeddingService, vectorIndex, logger)
-	searchResults, err := searchService.Search(ctx, *query)
-	if err != nil {
-		logger.WithCtx(ctx).Error("Failed to search", "error", err)
+	searchService := search2.NewSearchService(
+		embeddingService,
+		indexManagerService,
+		logger,
+		documentsRepository,
+	)
+
+	fmt.Print("> ")
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return 0
+		default:
+		}
+
+		userInput := strings.TrimSpace(scanner.Text())
+		if userInput == "" {
+			continue
+		}
+
+		if userInput == "exit" {
+			logger.WithCtx(ctx).Info("Bye!")
+			return 0
+		}
+
+		searchResults, err := searchService.Search(ctx, userInput)
+		if err != nil {
+			logger.WithCtx(ctx).Error("Failed to search", "error", err)
+			return 1
+		}
+
+		fmt.Println("-------- Search results by index --------")
+		for idx, searchResult := range searchResults {
+			fmt.Printf("%d. [%.1f] %s\n", idx+1, searchResult.Score, searchResult.Text)
+		}
+
+		searchResultsByDB, err := searchService.SearchDocuments(ctx, userInput)
+		if err != nil {
+			logger.WithCtx(ctx).Error("Failed to search in database", "error", err)
+			return 1
+		}
+		fmt.Println("\n-------- Search results by database --------")
+		for idx, searchResult := range searchResultsByDB {
+			fmt.Printf("%d. [%.1f] %s\n", idx+1, searchResult.Score, searchResult.Text)
+		}
+		fmt.Println()
+		fmt.Print("> ")
+	}
+
+	if err := scanner.Err(); err != nil {
+		logger.WithCtx(ctx).Error("reading standard input", "error", err)
 		return 1
 	}
 
-	fmt.Println("Search results:")
-	for idx, searchResult := range searchResults {
-		fmt.Printf("%d. [%.1f] %s\n", idx+1, searchResult.Score, searchResult.Text)
-	}
-
 	return 0
+}
+
+func newOpenAIClient(cfg config.Config) *openai.Client {
+	aiClientConfig := openai.DefaultConfig(cfg.AiAPIKey)
+	aiClientConfig.BaseURL = "http://localhost:11434/v1"
+
+	return openai.NewClientWithConfig(aiClientConfig)
 }

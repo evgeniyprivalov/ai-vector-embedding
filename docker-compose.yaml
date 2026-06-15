@@ -1,0 +1,26 @@
+services:
+  postgresql:
+    image: "pgvector/pgvector:pg16"
+    restart: unless-stopped
+    hostname: ai_vector_embedding_postgresql
+    container_name: ai_vector_embedding_postgresql
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: common_db
+      POSTGRES_USER: local_admin
+      POSTGRES_PASSWORD: local_admin
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "54323:5432"
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U local_admin -d common_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

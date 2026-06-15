@@ -7,25 +7,27 @@ import (
 
 	log "gitlab.com/evgeniyprivalov/golib/observability/log"
 
-	index_manager_dto "ai-vector-embedding/internal/services/index_manager/dto"
 	dto "ai-vector-embedding/internal/services/search/dto"
 )
 
 type SearchService struct {
-	embeddingService embeddingService
-	vectorIndex      *index_manager_dto.VectorIndex
-	logger           *log.Logger
+	embeddingService    embeddingService
+	indexManagerService indexManagerService
+	logger              *log.Logger
+	documentsRepository documentsRepository
 }
 
 func NewSearchService(
 	embeddingService embeddingService,
-	vectorIndex *index_manager_dto.VectorIndex,
+	indexManagerService indexManagerService,
 	logger *log.Logger,
+	documentsRepository documentsRepository,
 ) *SearchService {
 	return &SearchService{
-		embeddingService: embeddingService,
-		vectorIndex:      vectorIndex,
-		logger:           logger,
+		embeddingService:    embeddingService,
+		indexManagerService: indexManagerService,
+		logger:              logger,
+		documentsRepository: documentsRepository,
 	}
 }
 
@@ -37,9 +39,11 @@ func (svc *SearchService) Search(ctx context.Context, query string) ([]dto.Searc
 		return nil, err
 	}
 
-	results := make([]dto.SearchResult, 0, len(svc.vectorIndex.Documents))
+	vectorIndex := svc.indexManagerService.GetVectorIndex()
 
-	for _, document := range svc.vectorIndex.Documents {
+	results := make([]dto.SearchResult, 0, len(vectorIndex.Documents))
+
+	for _, document := range vectorIndex.Documents {
 		results = append(results, dto.SearchResult{
 			Text:  document.Text,
 			Score: svc.cosineSimilarity(document.Embedding, queryEmbedding),
@@ -74,4 +78,32 @@ func (svc *SearchService) cosineSimilarity(a, b []float32) float32 {
 	}
 
 	return dot / float32(math.Sqrt(float64(normA))*math.Sqrt(float64(normB)))
+}
+
+func (svc *SearchService) SearchDocuments(ctx context.Context, query string) ([]dto.SearchResult, error) {
+	svc.logger.WithCtx(ctx).Info("Looking for cosine similarity for query", "query", query)
+
+	queryEmbedding, err := svc.embeddingService.Embedding(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	documents, err := svc.documentsRepository.Search(ctx, queryEmbedding, topResults)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]dto.SearchResult, 0, len(documents))
+	for _, document := range documents {
+		results = append(results, dto.SearchResult{
+			Text:  document.Content,
+			Score: svc.cosineSimilarity(document.Embedding.Slice(), queryEmbedding),
+		})
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+
+	return results, nil
 }

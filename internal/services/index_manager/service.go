@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,38 +19,143 @@ import (
 )
 
 type IndexManager struct {
+	vectorIndex      atomic.Pointer[dto.VectorIndex]
 	embeddingService embeddingService
 	logger           *log.Logger
+	indexPath        string
+	documentsPath    string
 }
 
 func NewIndexManager(
 	embeddingService embeddingService,
 	logger *log.Logger,
+	indexPath string,
+	documentsPath string,
 ) *IndexManager {
 	return &IndexManager{
 		embeddingService: embeddingService,
 		logger:           logger,
+		indexPath:        indexPath,
+		documentsPath:    documentsPath,
 	}
 }
 
-func (svc *IndexManager) Sync(
-	ctx context.Context,
-	indexPath string,
-	sourceFile string,
-) (*dto.VectorIndex, error) {
-	currentIndex, err := svc.loadIndex(indexPath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("load index: %w", err)
+func (svc *IndexManager) GetVectorIndex() *dto.VectorIndex {
+	return svc.vectorIndex.Load()
+}
+
+func (svc *IndexManager) AutoSync(ctx context.Context) error {
+	if err := svc.Sync(ctx); err != nil {
+		return err
 	}
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := svc.Sync(ctx); err != nil {
+					svc.logger.WithCtx(ctx).Error("failed to sync index manager", "error", err)
+					continue
+				}
+
+				svc.logger.WithCtx(ctx).Info("synced index manager")
+			}
+		}
+	}()
+
+	return nil
+}
+
+func (svc *IndexManager) Sync(ctx context.Context) error {
+	currentIndex := svc.GetVectorIndex()
 
 	if currentIndex == nil {
-		currentIndex = &dto.VectorIndex{}
+		index, err := svc.loadIndex()
+		switch {
+		case err == nil:
+			currentIndex = index
+
+		case errors.Is(err, os.ErrNotExist):
+			currentIndex = &dto.VectorIndex{}
+
+		default:
+			return fmt.Errorf("load index: %w", err)
+		}
 	}
 
+	// hash -> document
 	existing := make(map[string]dto.Document, len(currentIndex.Documents))
 
 	for _, doc := range currentIndex.Documents {
 		existing[doc.Hash] = doc
+	}
+
+	// hash -> text
+	actualDocuments := make(map[string]string)
+
+	err := svc.streamDocument(
+		ctx,
+		func(text string) error {
+			hash := pkg.CalculateHash(text)
+
+			actualDocuments[hash] = text
+
+			return nil
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	// Add new documents
+	for hash, text := range actualDocuments {
+		if _, ok := existing[hash]; ok {
+			continue
+		}
+
+		embedding, err := svc.embeddingService.Embedding(ctx, text)
+		if err != nil {
+			return fmt.Errorf(
+				"create embedding for %s: %w",
+				hash,
+				err,
+			)
+		}
+
+		doc := dto.Document{
+			ID:        uuid.NewString(),
+			Hash:      hash,
+			Text:      text,
+			Embedding: embedding,
+		}
+
+		existing[hash] = doc
+
+		svc.logger.WithCtx(ctx).Info(
+			"document added",
+			"id", doc.ID,
+			"hash", hash,
+		)
+	}
+
+	// Remove deleted documents
+	for hash, doc := range existing {
+		if _, ok := actualDocuments[hash]; ok {
+			continue
+		}
+
+		delete(existing, hash)
+
+		svc.logger.WithCtx(ctx).Info(
+			"document removed",
+			"id", doc.ID,
+			"hash", hash,
+		)
 	}
 
 	newIndex := &dto.VectorIndex{
@@ -57,58 +163,24 @@ func (svc *IndexManager) Sync(
 		Documents: make([]dto.Document, 0, len(existing)),
 	}
 
-	err = svc.streamDocument(
-		ctx,
-		sourceFile,
-		func(text string) error {
-			hash := pkg.CalculateHash(text)
-
-			if cached, ok := existing[hash]; ok {
-				svc.logger.WithCtx(ctx).Info("Embedding for document got from cache", "id", cached.ID)
-
-				newIndex.Documents = append(
-					newIndex.Documents,
-					cached,
-				)
-
-				return nil
-			}
-
-			embedding, err := svc.embeddingService.Embedding(ctx, text)
-			if err != nil {
-				return fmt.Errorf("create embedding: %w", err)
-			}
-
-			newDocument := dto.Document{
-				ID:        uuid.NewString(),
-				Hash:      hash,
-				Text:      text,
-				Embedding: embedding,
-			}
-
-			newIndex.Documents = append(
-				newIndex.Documents,
-				newDocument,
-			)
-
-			svc.logger.WithCtx(ctx).Info("Embedding for document has been refreshed", "id", newDocument.ID, "hash", hash, "text", text)
-
-			return nil
-		},
-	)
-	if err != nil {
-		return nil, err
+	for _, doc := range existing {
+		newIndex.Documents = append(
+			newIndex.Documents,
+			doc,
+		)
 	}
 
-	if err := svc.saveIndexAtomic(indexPath, newIndex); err != nil {
-		return nil, err
+	svc.vectorIndex.Store(newIndex)
+
+	if err := svc.saveIndexAtomic(newIndex); err != nil {
+		return fmt.Errorf("save index: %w", err)
 	}
 
-	return newIndex, nil
+	return nil
 }
 
-func (svc *IndexManager) loadIndex(indexPath string) (*dto.VectorIndex, error) {
-	b, err := os.ReadFile(indexPath)
+func (svc *IndexManager) loadIndex() (*dto.VectorIndex, error) {
+	b, err := os.ReadFile(svc.indexPath)
 	if err != nil {
 		return nil, fmt.Errorf("read index: %w", err)
 	}
@@ -123,17 +195,16 @@ func (svc *IndexManager) loadIndex(indexPath string) (*dto.VectorIndex, error) {
 
 func (svc *IndexManager) streamDocument(
 	ctx context.Context,
-	path string,
 	callback func(text string) error,
 ) error {
-	file, err := os.Open(path)
+	file, err := os.Open(svc.documentsPath)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
 		if err = file.Close(); err != nil {
-			svc.logger.WithCtx(ctx).Error("failed to close file", "error", err, "path", path)
+			svc.logger.WithCtx(ctx).Error("failed to close file", "error", err, "path", svc.documentsPath)
 		}
 	}()
 
@@ -180,11 +251,8 @@ func (svc *IndexManager) streamDocument(
 	return flush()
 }
 
-func (svc *IndexManager) saveIndexAtomic(
-	path string,
-	index *dto.VectorIndex,
-) error {
-	tmp := path + ".tmp"
+func (svc *IndexManager) saveIndexAtomic(index *dto.VectorIndex) error {
+	tmp := svc.indexPath + ".tmp"
 
 	data, err := json.MarshalIndent(index, "", "  ")
 	if err != nil {
@@ -195,5 +263,5 @@ func (svc *IndexManager) saveIndexAtomic(
 		return err
 	}
 
-	return os.Rename(tmp, path)
+	return os.Rename(tmp, svc.indexPath)
 }
