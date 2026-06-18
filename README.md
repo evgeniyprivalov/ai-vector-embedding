@@ -1,5 +1,7 @@
 # ai-vector-embedding
 
+_Fast small project to learn AI usage base topics_
+
 Polyglot vector search backend for document ingestion and semantic search.
 
 ## What this project is
