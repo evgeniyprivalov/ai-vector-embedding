@@ -1,0 +1,8 @@
+description: Not found response
+content:
+  application/json:
+    schema:
+      $ref: "../components/responses/BaseResponse.yaml"
+    example:
+      ok: false
+      message: Can not process operation

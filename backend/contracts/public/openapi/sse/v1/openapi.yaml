@@ -1,0 +1,17 @@
+openapi: 3.0.0
+info:
+  title: Public API
+  description: API for work with AI
+  version: 1.0.0
+servers:
+  - url: https://api.example.com/stream/v1
+    description: Production server
+  - url: http://localhost:3000/stream/v1
+    description: Development server
+tags:
+  - name: Ask
+    description: Operations related to ask.
+
+paths:
+  /ask:
+    $ref: "paths/ask/ask.yaml"

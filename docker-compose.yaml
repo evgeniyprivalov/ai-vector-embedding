@@ -1,11 +1,11 @@
 services:
   postgresql:
-    image: "pgvector/pgvector:pg16"
+    image: mirror.gcr.io/pgvector/pgvector:pg16
     restart: unless-stopped
     hostname: ai_vector_embedding_postgresql
     container_name: ai_vector_embedding_postgresql
     env_file:
-      - .env
+      - backend/core/.env
     environment:
       POSTGRES_DB: common_db
       POSTGRES_USER: local_admin
@@ -22,5 +22,108 @@ services:
       timeout: 5s
       retries: 5
 
+  chunker:
+    build:
+      context: ./backend/chunker
+      dockerfile: Dockerfile
+    container_name: chunker
+    restart: unless-stopped
+    ports:
+      - "50051:50051"
+    networks:
+      - default
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import socket; s=socket.socket(); s.connect((\"127.0.0.1\",50051)); s.close()'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  api-server:
+    build:
+      context: ./backend/core
+      dockerfile: Dockerfile
+    container_name: api-server
+    restart: unless-stopped
+    command:
+      - /app/server
+    env_file:
+      - ./backend/core/.env
+    environment:
+      CHUNKER_SERVER_GRPC_HOST: "chunker:50051"
+      CHUNKER_SERVER_GRPC_SECURE: "false"
+      AI_HOST: "http://host.docker.internal:11434"
+      POSTGRESQL_DSN: "postgresql://local_admin:local_admin@postgresql:5432/common_db"
+    ports:
+      - "8080:8080"
+    networks:
+      - default
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      chunker:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/live"]
+      interval: 20s
+      timeout: 3s
+      retries: 5
+
+  grafana:
+    image: mirror.gcr.io/grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - default
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo.yaml"]
+    ports:
+      - "3200:3200"
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+    networks:
+      - default
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - default
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel_collector.yaml"]
+    volumes:
+      - ./observability/otel_collector.yaml:/etc/otel_collector.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    networks:
+      - default
+    depends_on:
+      - tempo
+#      - prometheus
+      - loki
+
 volumes:
   postgres_data:
+  grafana_data:

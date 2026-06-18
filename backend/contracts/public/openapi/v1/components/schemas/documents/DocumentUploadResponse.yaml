@@ -1,0 +1,14 @@
+type: object
+required:
+  - fileName
+  - chunksAmount
+properties:
+  fileName:
+    type: string
+    description: Name of the uploaded file.
+    example: some_file.pdf
+  chunksAmount:
+    type: integer
+    format: int64
+    description: Amount of uploaded chunks.
+    example: 100500

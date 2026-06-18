@@ -1,0 +1,234 @@
+// Handler creates http.Handler with routing matching OpenAPI spec.
+func Handler(si ServerInterface) http.Handler {
+  return HandlerWithOptions(si, GorillaServerOptions{})
+}
+
+type GorillaServerOptions struct {
+    BaseURL string
+    BaseRouter *mux.Router
+    Middlewares []MiddlewareFunc
+    ErrorHandlerFunc   func(w http.ResponseWriter, r *http.Request, err error)
+    RequestMiddlewares []MiddlewareFunc
+}
+
+// HandlerFromMux creates http.Handler with routing matching OpenAPI spec based on the provided mux.
+func HandlerFromMux(si ServerInterface, r *mux.Router) http.Handler {
+    return HandlerWithOptions(si, GorillaServerOptions {
+        BaseRouter: r,
+    })
+}
+
+func HandlerFromMuxWithBaseURL(si ServerInterface, r *mux.Router, baseURL string) http.Handler {
+    return HandlerWithOptions(si, GorillaServerOptions {
+        BaseURL: baseURL,
+        BaseRouter: r,
+    })
+}
+
+// HandlerWithOptions creates http.Handler with additional options
+func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.Handler {
+r := options.BaseRouter
+
+if r == nil {
+r = mux.NewRouter()
+}
+if options.ErrorHandlerFunc == nil {
+    options.ErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+    }
+}
+{{if .}}wrapper := ServerInterfaceWrapper{
+Handler: si,
+HandlerMiddlewares: options.Middlewares,
+ErrorHandlerFunc: options.ErrorHandlerFunc,
+}
+{{end}}
+{{range .}}
+r.HandleFunc(
+    options.BaseURL+"{{.Path | swaggerUriToGorillaUri }}",
+    prepareHandler(http.HandlerFunc(wrapper.{{.OperationId}}), "{{.Path | swaggerUriToGorillaUri }}", options).(http.HandlerFunc),
+).Methods("{{ .Method }}")
+{{end}}
+return r
+}
+
+func prepareHandler(h http.Handler, path string, opts GorillaServerOptions) http.Handler {
+    h = otelhttp.WithRouteTag(opts.BaseURL + path, h).(http.HandlerFunc)
+
+    for _, middleware := range opts.RequestMiddlewares {
+        h = middleware(h)
+    }
+
+    return h
+}
+
+
+
+
+
+
+// SSEWriter helps writing Server-Sent Events responses.
+type SSEWriter struct {
+	w       http.ResponseWriter
+	flusher http.Flusher
+}
+
+// NewSSEWriter configures the response as an SSE stream.
+func NewSSEWriter(
+	w http.ResponseWriter,
+) (*SSEWriter, error) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return nil, errors.New("streaming unsupported")
+	}
+
+	headers := w.Header()
+
+	headers.Set(
+		"Content-Type",
+		"text/event-stream",
+	)
+
+	headers.Set(
+		"Cache-Control",
+		"no-cache",
+	)
+
+	headers.Set(
+		"Connection",
+		"keep-alive",
+	)
+
+	return &SSEWriter{
+		w:       w,
+		flusher: flusher,
+	}, nil
+}
+
+// Send writes a standard SSE message:
+//
+//	data: {...}
+//
+//
+func (s *SSEWriter) Send(v any) error {
+	payload, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintf(
+		s.w,
+		"data: %s\n\n",
+		payload,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	s.flusher.Flush()
+
+	return nil
+}
+
+// SendEvent writes a named SSE event:
+//
+//	event: token
+//	data: {...}
+//
+//
+func (s *SSEWriter) SendEvent(
+	event string,
+	v any,
+) error {
+	payload, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintf(
+		s.w,
+		"event: %s\n",
+		event,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintf(
+		s.w,
+		"data: %s\n\n",
+		payload,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	s.flusher.Flush()
+
+	return nil
+}
+
+// Comment writes an SSE comment:
+//
+//	: keepalive
+//
+//
+func (s *SSEWriter) Comment(
+	comment string,
+) error {
+	_, err := fmt.Fprintf(
+		s.w,
+		": %s\n\n",
+		comment,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	s.flusher.Flush()
+
+	return nil
+}
+
+// Retry instructs the client how long to wait before reconnecting.
+func (s *SSEWriter) Retry(
+	duration time.Duration,
+) error {
+	_, err := fmt.Fprintf(
+		s.w,
+		"retry: %d\n\n",
+		duration.Milliseconds(),
+	)
+
+	if err != nil {
+		return err
+	}
+
+	s.flusher.Flush()
+
+	return nil
+}
+
+// Done sends the OpenAI-style stream terminator:
+//
+//	data: [DONE]
+//
+//
+func (s *SSEWriter) Done() error {
+	_, err := fmt.Fprint(
+		s.w,
+		"data: [DONE]\n\n",
+	)
+
+	if err != nil {
+		return err
+	}
+
+	s.flusher.Flush()
+
+	return nil
+}

@@ -1,0 +1,405 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "description": "API for work with AI",
+    "title": "Public API",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "description": "Production server",
+      "url": "https://api.example.com/v1"
+    },
+    {
+      "description": "Development server",
+      "url": "http://localhost:8080/v1"
+    }
+  ],
+  "tags": [
+    {
+      "description": "Operations related to documents.",
+      "name": "Documents"
+    },
+    {
+      "description": "Operations related to search.",
+      "name": "Search"
+    }
+  ],
+  "paths": {
+    "/documents/upload": {
+      "post": {
+        "description": "Upload document.",
+        "operationId": "documentUpload",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentUploadRequest"
+              }
+            }
+          },
+          "description": "Upload document body."
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "chunksAmount": 100500
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentUploadResponse"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": false,
+                  "message": "Can not process operation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "Bad request response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": false,
+                  "message": "Can not process operation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "Unauthorized response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": false,
+                  "message": "Can not process operation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "Forbidden response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": false,
+                  "message": "Can not process operation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "Not found response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": false,
+                  "message": "Can not process operation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error response"
+          }
+        },
+        "security": [],
+        "summary": "Upload document.",
+        "tags": [
+          "Documents"
+        ],
+        "x-timeout": 20000
+      }
+    },
+    "/search": {
+      "get": {
+        "description": "Search.",
+        "operationId": "search",
+        "parameters": [
+          {
+            "description": "Query to look for.",
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "example": "Mars missions.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "content": "The Mars 2020 rover, also known as Perseverance...",
+                  "cosineSimilarity": 0.723
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": false,
+                  "message": "Can not process operation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "Bad request response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": false,
+                  "message": "Can not process operation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "Unauthorized response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": false,
+                  "message": "Can not process operation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "Forbidden response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": false,
+                  "message": "Can not process operation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "Not found response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": false,
+                  "message": "Can not process operation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BaseResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error response"
+          }
+        },
+        "security": [],
+        "summary": "Search.",
+        "tags": [
+          "Search"
+        ],
+        "x-timeout": 5000
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "BadRequest": {
+        "content": {
+          "application/json": {
+            "example": {
+              "ok": false,
+              "message": "Can not process operation"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/BaseResponse"
+            }
+          }
+        },
+        "description": "Bad request response"
+      },
+      "Unauthorized": {
+        "content": {
+          "application/json": {
+            "example": {
+              "ok": false,
+              "message": "Can not process operation"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/BaseResponse"
+            }
+          }
+        },
+        "description": "Unauthorized response"
+      },
+      "Forbidden": {
+        "content": {
+          "application/json": {
+            "example": {
+              "ok": false,
+              "message": "Can not process operation"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/BaseResponse"
+            }
+          }
+        },
+        "description": "Forbidden response"
+      },
+      "NotFound": {
+        "content": {
+          "application/json": {
+            "example": {
+              "ok": false,
+              "message": "Can not process operation"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/BaseResponse"
+            }
+          }
+        },
+        "description": "Not found response"
+      },
+      "InternalServerError": {
+        "content": {
+          "application/json": {
+            "example": {
+              "ok": false,
+              "message": "Can not process operation"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/BaseResponse"
+            }
+          }
+        },
+        "description": "Internal Server Error response"
+      }
+    },
+    "schemas": {
+      "DocumentUploadRequest": {
+        "properties": {
+          "document": {
+            "description": "Document to upload.",
+            "format": "binary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document"
+        ],
+        "type": "object"
+      },
+      "DocumentUploadResponse": {
+        "example": {
+          "fileName": "some_file.pdf",
+          "chunksAmount": 100500
+        },
+        "properties": {
+          "fileName": {
+            "description": "Name of the uploaded file.",
+            "example": "some_file.pdf",
+            "type": "string"
+          },
+          "chunksAmount": {
+            "description": "Amount of uploaded chunks.",
+            "example": 100500,
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chunksAmount",
+          "fileName"
+        ],
+        "type": "object"
+      },
+      "BaseResponse": {
+        "description": "Internal Server Error",
+        "example": {
+          "ok": true,
+          "message": "message"
+        },
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "message": {
+            "description": "A human-readable message describing the error.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "ok"
+        ],
+        "type": "object"
+      },
+      "SearchResponse": {
+        "example": {
+          "content": "The Mars 2020 rover, also known as Perseverance...",
+          "cosineSimilarity": 0.723
+        },
+        "properties": {
+          "content": {
+            "description": "Content of the chunk",
+            "example": "The Mars 2020 rover, also known as Perseverance...",
+            "type": "string"
+          },
+          "cosineSimilarity": {
+            "description": "Cosine similarity.",
+            "example": 0.723,
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "content",
+          "cosineSimilarity"
+        ],
+        "type": "object"
+      }
+    }
+  }
+}

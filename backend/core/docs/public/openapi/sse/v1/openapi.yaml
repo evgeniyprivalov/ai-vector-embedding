@@ -1,0 +1,155 @@
+openapi: 3.0.0
+info:
+  description: API for work with AI
+  title: Public API
+  version: 1.0.0
+servers:
+- description: Production server
+  url: https://api.example.com/stream/v1
+- description: Development server
+  url: http://localhost:8080/stream/v1
+tags:
+- description: Operations related to ask.
+  name: Ask
+paths:
+  /ask:
+    get:
+      description: User ask something.
+      operationId: ask
+      parameters:
+      - description: Query that user asked.
+        in: query
+        name: query
+        required: true
+        schema:
+          example: Mars missions.
+          type: string
+      responses:
+        "200":
+          content:
+            text/event-stream:
+              examples:
+                stream:
+                  value: |
+                    data: {"type":"token","token":"В"}
+
+                    data: {"type":"token","token":" документах"}
+
+                    data: {"type":"sources","sources":[{"text":"...","score":0.92}]}
+
+                    data: [DONE]
+              schema:
+                type: string
+          description: Success.
+        "400":
+          content:
+            application/json:
+              example:
+                ok: false
+                message: Can not process operation
+              schema:
+                $ref: '#/components/schemas/BaseResponse'
+          description: Bad request response
+        "401":
+          content:
+            application/json:
+              example:
+                ok: false
+                message: Can not process operation
+              schema:
+                $ref: '#/components/schemas/BaseResponse'
+          description: Unauthorized response
+        "403":
+          content:
+            application/json:
+              example:
+                ok: false
+                message: Can not process operation
+              schema:
+                $ref: '#/components/schemas/BaseResponse'
+          description: Forbidden response
+        "404":
+          content:
+            application/json:
+              example:
+                ok: false
+                message: Can not process operation
+              schema:
+                $ref: '#/components/schemas/BaseResponse'
+          description: Not found response
+        "500":
+          content:
+            application/json:
+              example:
+                ok: false
+                message: Can not process operation
+              schema:
+                $ref: '#/components/schemas/BaseResponse'
+          description: Internal Server Error response
+      security: []
+      summary: Ask.
+      tags:
+      - Ask
+components:
+  responses:
+    BadRequest:
+      content:
+        application/json:
+          example:
+            ok: false
+            message: Can not process operation
+          schema:
+            $ref: '#/components/schemas/BaseResponse'
+      description: Bad request response
+    Unauthorized:
+      content:
+        application/json:
+          example:
+            ok: false
+            message: Can not process operation
+          schema:
+            $ref: '#/components/schemas/BaseResponse'
+      description: Unauthorized response
+    Forbidden:
+      content:
+        application/json:
+          example:
+            ok: false
+            message: Can not process operation
+          schema:
+            $ref: '#/components/schemas/BaseResponse'
+      description: Forbidden response
+    NotFound:
+      content:
+        application/json:
+          example:
+            ok: false
+            message: Can not process operation
+          schema:
+            $ref: '#/components/schemas/BaseResponse'
+      description: Not found response
+    InternalServerError:
+      content:
+        application/json:
+          example:
+            ok: false
+            message: Can not process operation
+          schema:
+            $ref: '#/components/schemas/BaseResponse'
+      description: Internal Server Error response
+  schemas:
+    BaseResponse:
+      description: Internal Server Error
+      example:
+        ok: true
+        message: message
+      properties:
+        ok:
+          type: boolean
+        message:
+          description: A human-readable message describing the error.
+          type: string
+      required:
+      - message
+      - ok
+      type: object

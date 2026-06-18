@@ -1,0 +1,7 @@
+description: Ok response
+content:
+  application/json:
+    schema:
+      $ref: "../components/responses/BaseResponse.yaml"
+    example:
+      ok: true

@@ -1,0 +1,36 @@
+get:
+  summary: Search.
+  description: Search.
+  operationId: search
+  tags:
+    - Search
+  security: []
+  x-timeout: 5000
+  parameters:
+    - name: query
+      in: query
+      required: true
+      description: Query to look for.
+      schema:
+        type: string
+        example: Mars missions.
+  responses:
+    '200':
+      description: Success.
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/search/SearchResponse.yaml'
+          example:
+            content: "The Mars 2020 rover, also known as Perseverance..."
+            cosineSimilarity: 0.723
+    '400':
+      $ref: "../../responses/BadRequest.yaml"
+    '401':
+      $ref: "../../responses/Unauthorized.yaml"
+    '403':
+      $ref: "../../responses/Forbidden.yaml"
+    '404':
+      $ref: "../../responses/NotFound.yaml"
+    '500':
+      $ref: "../../responses/InternalServerError.yaml"

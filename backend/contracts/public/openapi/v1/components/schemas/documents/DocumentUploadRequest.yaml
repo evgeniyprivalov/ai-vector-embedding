@@ -1,0 +1,8 @@
+type: object
+required:
+  - document
+properties:
+  document:
+    type: string
+    format: binary
+    description: Document to upload.

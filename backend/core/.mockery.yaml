@@ -1,0 +1,24 @@
+include-auto-generated: true
+filename: "mock_{{.InterfaceName}}.go"
+packages:
+  github.com/evgeniyprivalov/ai-vector-embedding/backend/core/internal/services/search:
+    interfaces:
+      SearchService:
+        config:
+          dir: internal/mocks/search
+  github.com/evgeniyprivalov/ai-vector-embedding/backend/core/internal/services/embedding:
+    interfaces:
+      EmbeddingService:
+        config:
+          dir: internal/mocks/embedding
+  github.com/evgeniyprivalov/ai-vector-embedding/backend/core/internal/services/index_manager:
+    interfaces:
+      IndexManager:
+        config:
+          dir: internal/mocks/index_manager
+  "github.com/evgeniyprivalov/ai-vector-embedding/backend/core/internal/contracts/chunker/v1":
+    interfaces:
+      ChunkerServiceClient:
+        config:
+          include-auto-generated: true
+          dir: internal/mocks/contracts/chunker

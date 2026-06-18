@@ -32,3 +32,10 @@ go.work.sum
 .vscode/
 vendor/
 .log
+
+.venv/
+
+site-packages/
+bin/
+*.log
+*.cfg

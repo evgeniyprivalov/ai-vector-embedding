@@ -1,0 +1,89 @@
+// Handler creates http.Handler with routing matching OpenAPI spec.
+func Handler(si ServerInterface) http.Handler {
+  return HandlerWithOptions(si, GorillaServerOptions{})
+}
+
+type GorillaServerOptions struct {
+    BaseURL string
+    BaseRouter *mux.Router
+    Middlewares []MiddlewareFunc
+    ErrorHandlerFunc   func(w http.ResponseWriter, r *http.Request, err error)
+    RequestMiddlewares []MiddlewareFunc
+}
+
+// HandlerFromMux creates http.Handler with routing matching OpenAPI spec based on the provided mux.
+func HandlerFromMux(si ServerInterface, r *mux.Router) http.Handler {
+    return HandlerWithOptions(si, GorillaServerOptions {
+        BaseRouter: r,
+    })
+}
+
+func HandlerFromMuxWithBaseURL(si ServerInterface, r *mux.Router, baseURL string) http.Handler {
+    return HandlerWithOptions(si, GorillaServerOptions {
+        BaseURL: baseURL,
+        BaseRouter: r,
+    })
+}
+
+// HandlerWithOptions creates http.Handler with additional options
+func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.Handler {
+r := options.BaseRouter
+
+if r == nil {
+r = mux.NewRouter()
+}
+if options.ErrorHandlerFunc == nil {
+    options.ErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+    }
+}
+{{if .}}wrapper := ServerInterfaceWrapper{
+Handler: si,
+HandlerMiddlewares: options.Middlewares,
+ErrorHandlerFunc: options.ErrorHandlerFunc,
+}
+{{end}}
+{{range .}}
+r.HandleFunc(
+    options.BaseURL+"{{.Path | swaggerUriToGorillaUri }}",
+    prepareHandler(http.HandlerFunc(wrapper.{{.OperationId}}), "{{.Path | swaggerUriToGorillaUri }}", options).(http.HandlerFunc),
+).Methods("{{ .Method }}")
+{{end}}
+return r
+}
+
+func prepareHandler(h http.Handler, path string, opts GorillaServerOptions) http.Handler {
+    h = otelhttp.WithRouteTag(opts.BaseURL + path, h).(http.HandlerFunc)
+
+    for _, middleware := range opts.RequestMiddlewares {
+        h = middleware(h)
+    }
+
+    return h
+}
+
+type (
+    {{- range . }}
+    // ({{ .Method }} {{ .Path }})
+    {{ .OperationId }}HandlerFunc func(ctx context.Context, request {{ .OperationId}}RequestObject) ({{ .OperationId }}ResponseObject, error)
+    {{- end }}
+)
+
+type StrictServer struct {
+    {{- range . }}
+        // ({{ .Method }} {{ .Path }})
+        {{ .OperationId }}Handler {{ .OperationId}}HandlerFunc
+    {{- end }}
+}
+
+{{- range . }}
+    // ({{ .Method }} {{ .Path }})
+    func (s StrictServer) {{ .OperationId }}(ctx context.Context, request {{ .OperationId }}RequestObject) ({{ .OperationId }}ResponseObject, error) {
+        if s.{{ .OperationId }}Handler == nil {
+            return nil, errors.New("implement me")
+        }
+
+        return s.{{ .OperationId }}Handler(ctx, request)
+    }
+{{- end }}
+

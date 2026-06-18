@@ -1,0 +1,33 @@
+post:
+  summary: Upload document.
+  description: Upload document.
+  operationId: documentUpload
+  tags:
+    - Documents
+  security: []
+  x-timeout: 20000
+  requestBody:
+    description: Upload document body.
+    content:
+      multipart/form-data:
+        schema:
+          $ref: '../../components/schemas/documents/DocumentUploadRequest.yaml'
+  responses:
+    '200':
+      description: Success.
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/documents/DocumentUploadResponse.yaml'
+          example:
+            chunksAmount: 100500
+    '400':
+      $ref: "../../responses/BadRequest.yaml"
+    '401':
+      $ref: "../../responses/Unauthorized.yaml"
+    '403':
+      $ref: "../../responses/Forbidden.yaml"
+    '404':
+      $ref: "../../responses/NotFound.yaml"
+    '500':
+      $ref: "../../responses/InternalServerError.yaml"

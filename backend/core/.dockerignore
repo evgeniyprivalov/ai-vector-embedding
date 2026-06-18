@@ -1,0 +1,7 @@
+.idea
+.env
+.env.dist
+.mockery.yaml
+*.log
+*.txt
+*.json

@@ -1,0 +1,22 @@
+openapi: 3.0.0
+info:
+  title: Public API
+  description: API for work with AI
+  version: 1.0.0
+servers:
+  - url: https://api.example.com/v1
+    description: Production server
+  - url: http://localhost:8080/v1
+    description: Development server
+tags:
+  - name: Documents
+    description: Operations related to documents.
+  - name: Search
+    description: Operations related to search.
+
+paths:
+  /documents/upload:
+    $ref: "paths/documents/documents_upload.yaml"
+
+  /search:
+    $ref: "paths/search/search.yaml"

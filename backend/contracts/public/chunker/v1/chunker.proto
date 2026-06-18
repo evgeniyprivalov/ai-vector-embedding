@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package chunker.v1;
+
+option go_package = "github.com/evgeniyprivalov/ai-vector-embedding/backend/core/internal/contracts/chunker";
+
+message ChunkRequest {
+  bytes file_content = 1;    // содержимое файла
+  string file_name = 2;      // имя файла с расширением (для определения типа)
+  int32 chunk_size = 3;      // примерный размер чанка в символах (по умолчанию 1000)
+  int32 chunk_overlap = 4;   // перекрытие между чанками (по умолчанию 200)
+}
+
+message ChunkResponse {
+  string content = 1;        // текст чанка
+  int32 index = 2;           // порядковый номер чанка
+  string source = 3;         // имя файла + страница (например, "doc.pdf:page3")
+}
+
+service ChunkerService {
+    rpc ExtractChunks(stream ChunkRequest) returns (stream ChunkResponse);
+}

@@ -1,0 +1,42 @@
+get:
+  summary: Ask.
+  description: User ask something.
+  operationId: ask
+  tags:
+    - Ask
+  security: []
+  parameters:
+    - name: query
+      in: query
+      required: true
+      description: Query that user asked.
+      schema:
+        type: string
+        example: Mars missions.
+  responses:
+    '200':
+      description: Success.
+      content:
+        text/event-stream:
+          schema:
+            type: string
+          examples:
+            stream:
+              value: |
+                data: {"type":"token","token":"В"}
+
+                data: {"type":"token","token":" документах"}
+
+                data: {"type":"sources","sources":[{"text":"...","score":0.92}]}
+
+                data: [DONE]
+    '400':
+      $ref: "../../responses/BadRequest.yaml"
+    '401':
+      $ref: "../../responses/Unauthorized.yaml"
+    '403':
+      $ref: "../../responses/Forbidden.yaml"
+    '404':
+      $ref: "../../responses/NotFound.yaml"
+    '500':
+      $ref: "../../responses/InternalServerError.yaml"
